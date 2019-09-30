@@ -1,0 +1,638 @@
+---
+title: "ANALYSIS OF FACTORS CONTRIBUTING TO CRIME"
+author: "The Blue Devils"
+date: "May 1, 2019"
+output: 
+  github_document:
+  fig_height: 2
+  fig_width: 3
+---
+
+## Introduction
+
+#### Motivation
+
+While brainstorming problems we might want to explore, we began to think about issues relevant to our community at Duke and how Durham, NC has changed over time. It is a frequent occurrence to hear someone who has lived for a long time in the area talk about how Durham, particularly downtown Durham, has changed significantly over the past 10 to 20 years in several ways, including in terms of a reduction of crime rates. Considering this phenomenon prompted us to wonder about why this might be and what factors might contribute most to crime rates in general.
+
+#### Question of Interest
+
+This thought process was our motivation for considering the question of what factors related to attributes of a given location and population would best predict crime rates. For this purpose, we obtained a data set concerning communities and crime from the UCI Machine Learning Repository site.
+
+#### Hypotheses
+
+Given the factors included in this data set, we hypothesize that median income, the percentage of people in the area who live in an urban setting, and the population's level of education will be among the strongest predictors of crime. The rationale for this hypothesis is that low median income, an urban setting, and a less educated population seem to be factors that might predispose populations to higher rates of crime.
+
+#### Data
+
+The data set from the UCI Machine Learning Repository site employed in this analysis includes 147 variables and 2215 observations.There are two response variables that we are interested in. These are ViolentCrimesPerPop and nonViolPerPop, which are the number of violent and non-violent crimes per 100K people in the population, respectively. Both of these variables take on numeric decimal values. 
+
+There are 147 variables in the original dataset. However, for this analysis we examined each one and chose a subset of 25 of these variables to be 'potential predictors,' meaning that these 25 variables will be treated as possible predictors in model selection and could end up in the final model. These 25 predictors were chosen on the basis of being relevant and interesting in their relation to the phenomenon of crime in a community, as well as on the basis of not having excessive overlap between them (for example, we included medIncome, which is the median household income, but did not include medFamInc, which is median family income). We recognize that in the thoroughest possible analysis of this data we might not want to select variables in this manner, as it could result in our missing something important. However, for this class and for our analysis we believe that rather than selecting a model from all 147 variables, that it is reasonable to use these 25, which are selected on the basis of reasonable considerations and which together span a broad range of information regarding the communities in the data set.
+
+#### Exploratory Data Analysis
+
+```{r load-packages, warning = FALSE, message = FALSE, echo = FALSE}
+library(tidyverse)
+library(broom)
+library(knitr) 
+library(rms)
+library(nnet)
+library(leaps)
+library(modelr)
+```
+
+```{r read-data-csv, warning = FALSE, message = FALSE, echo = FALSE}
+crime <- read_csv("/cloud/project/data/CommViolPredUnnormalizedDataHeaders.csv")
+```
+
+```{r modify-vartypes, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+#ViolentCrimesPerPop is initially character type, likely due to ?s originally representing missing data
+class(crime$ViolentCrimesPerPop)
+#Same is true of nonViolPerPop
+class(crime$nonViolPerPop)
+
+crime$ViolentCrimesPerPop = as.numeric(crime$ViolentCrimesPerPop)
+crime$nonViolPerPop = as.numeric(crime$nonViolPerPop)
+
+#Now, to check the predictor variables
+class(crime$population)
+class(crime$racepctblack)
+class(crime$racePctWhite)
+class(crime$racePctAsian)
+class(crime$racePctHisp)
+class(crime$agePct16t24)
+class(crime$pctUrban)
+class(crime$medIncome)
+class(crime$pctWSocSec)
+class(crime$pctWPubAsst)
+class(crime$PctPopUnderPov)
+class(crime$PctLess9thGrade)
+class(crime$PctNotHSGrad)
+class(crime$PctBSorMore)
+class(crime$PctUnemployed)
+class(crime$PctEmploy)
+class(crime$PctRecImmig5)
+class(crime$PctForeignBorn)
+class(crime$LemasTotReqPerPop)
+class(crime$PolicPerPop)
+class(crime$RacialMatchCommPol)
+class(crime$PctPolicWhite)
+class(crime$PctPolicMinor)
+class(crime$PopDens)
+class(crime$PolicBudgPerPop)
+
+#Change the rest that should be numeric (all of them should be numeric)
+
+crime$LemasTotReqPerPop = as.numeric(crime$LemasTotReqPerPop)
+crime$PolicPerPop = as.numeric(crime$PolicPerPop)
+crime$RacialMatchCommPol = as.numeric(crime$RacialMatchCommPol)
+crime$PctPolicWhite = as.numeric(crime$PctPolicWhite)
+crime$PctPolicMinor = as.numeric(crime$PctPolicMinor)
+crime$PolicBudgPerPop = as.numeric(crime$PolicBudgPerPop)
+
+#Double check that all are now numeric
+class(crime$ViolentCrimesPerPop)
+class(crime$nonViolPerPop)
+class(crime$population)
+class(crime$racepctblack)
+class(crime$racePctWhite)
+class(crime$racePctAsian)
+class(crime$racePctHisp)
+class(crime$agePct16t24)
+class(crime$pctUrban)
+class(crime$medIncome)
+class(crime$pctWSocSec)
+class(crime$pctWPubAsst)
+class(crime$PctPopUnderPov)
+class(crime$PctLess9thGrade)
+class(crime$PctNotHSGrad)
+class(crime$PctBSorMore)
+class(crime$PctUnemployed)
+class(crime$PctEmploy)
+class(crime$PctRecImmig5)
+class(crime$PctForeignBorn)
+class(crime$LemasTotReqPerPop)
+class(crime$PolicPerPop)
+class(crime$RacialMatchCommPol)
+class(crime$PctPolicWhite)
+class(crime$PctPolicMinor)
+class(crime$PopDens)
+class(crime$PolicBudgPerPop)
+
+#All vars. are now numeric.
+```
+As there are 25 predictor variables and two response variables of interest, a full exploratory data analysis would take up a massive amount of space, and therefore will not be shown explicitly here.
+```{r eda, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+ggplot(data=crime, mapping=aes(x=medIncome, y=ViolentCrimesPerPop)) +
+  geom_point(color="darkslateblue", shape=1) +
+  geom_hline(yintercept=0, color="black") +
+  labs(title="Median Household Income vs. Violent Crimes Per 100K People",
+    x="medIncome", y="ViolentCrimesPerPop") + theme_gray()
+
+ggplot(data=crime, mapping=aes(x=medIncome, y=nonViolPerPop)) +
+  geom_point(color="darkslateblue", shape=1) +
+  geom_hline(yintercept=0, color="black") +
+  labs(title="Median Household Income vs. Non-violent Crimes Per 100K People",
+    x="medIncome", y="nonViolPerPop") + theme_gray()
+```
+Using the predictor medIncome as an example of our EDA, there appears to be a negative relationship between median household income and crime in terms of both violent and non-violent crime, as we might expect. Both relationships are roughly linear, though the relationship with violent crimes perhaps has some slight curvature. Similar analysis has been done with the other predictors, and assumptions will be checked before using models.
+
+#### Missing Data
+
+```{r count-missing, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+colSums(is.na(crime))
+```
+
+```{r missing1, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+crime <- crime %>%
+  mutate(missingvio = is.na(ViolentCrimesPerPop), 
+         missingnonvio = is.na(nonViolPerPop))
+
+missingcheck <- lm(nonViolPerPop ~ missingvio, data = crime)
+kable(tidy(missingcheck),format="html",digits=3)
+
+missingcheck2 <- lm(ViolentCrimesPerPop ~ missingnonvio, data = crime)
+kable(tidy(missingcheck2),format="html",digits=3)
+```
+We have missing values in both of our response variables with 221 missing values for Violent Crimes and 97 for non-Violent Crimes. We tested the significance of the missingness in one response with the values of the other response and vice versa, and in both cases the coefficient was not significant, with both p-values greater than 0.05. Missing response variable values are not useful to our analysis, and it is reasonable to remove them as long as there is no bias in the missing values. It is for this reason, and because it seems that there is no bias in which values are missing, that we will cut observations with missing values of the response variables from our analysis.Another solution to this would be to use our predictor variables to impute new values for each of our missing response variables but because we had plenty of observations that had values for our response variables we elected to only use complete cases of our response variables.
+
+```{r missing2, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+crime <- crime %>%
+  mutate(missingpolice = is.na(PolicPerPop))
+
+missingcheck3 <- lm(nonViolPerPop ~ missingpolice, data = crime)
+kable(tidy(missingcheck3),format="html",digits=5)
+
+missingcheck4 <- lm(ViolentCrimesPerPop ~ missingpolice, data = crime)
+kable(tidy(missingcheck4),format="html",digits=5)
+```
+Additionally, 6 of the 25 predictor variables that we are using for this analysis are coming from the Lemas database on Police Departments. This data could have been extremely useful in our analysis but unfortunately, 1872 cities out of 2215 were missing all of the police data. After trying to fit the models without taking into account missingness of these, none of the 6 variables were in the Backwards Selection model using BIC. We then created a variable called missingpolice, that indicated whether a city was missing the Lemas police data or not. This variable, missingpolice, is actually a significant predictor for both Violent and non-Violent crimes.
+```{r rem-missing, warning = FALSE, message = FALSE, echo = FALSE}
+#Remove the NA, NaN, and Infinite values of our intended response variables:
+crime <- crime[!is.na(crime$ViolentCrimesPerPop),]
+crime <- crime[!is.nan(crime$ViolentCrimesPerPop),]
+crime <- crime[!is.infinite(crime$ViolentCrimesPerPop),]
+
+crime <- crime[!is.na(crime$nonViolPerPop),]
+crime <- crime[!is.nan(crime$nonViolPerPop),]
+crime <- crime[!is.infinite(crime$nonViolPerPop),]
+```
+
+## Multinomial Logistic Regression Analysis
+
+In our regression analysis, the following steps are taken. First, new categorical versions of ViolentCrimesPerPop and nonViolPerPop are created by dividing each into five levels of frequency of crime: very low, low, moderate, high, and very high. The cutoffs for the levels were selected based on an examination of the distributions of ViolentCrimesPerPop and nonViolPerPop, and were designed for the 'moderate' level to include the median of each. Then, the best multinomial logistic regression model is found using model selection, and this model is validated for predictive use.
+```{r cat-eval, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+#Use this info to help make judgements about cutoffs for the categorical variables--include median in the 'moderat' level
+
+min(crime$ViolentCrimesPerPop, na.rm=T)
+max(crime$ViolentCrimesPerPop, na.rm=T)
+min(crime$nonViolPerPop, na.rm=T)
+max(crime$nonViolPerPop, na.rm=T)
+
+median(crime$ViolentCrimesPerPop, na.rm=T)
+median(crime$nonViolPerPop, na.rm=T)
+
+ggplot(data = crime, mapping = aes(x = ViolentCrimesPerPop)) + 
+  geom_histogram(fill = "darkslateblue") + 
+  labs(title = "Distribution of ViolentCrimesPerPop", x = "ViolentCrimesPerPop", y = "Count") + theme_gray()
+
+ggplot(data = crime, mapping = aes(x = nonViolPerPop)) + 
+  geom_histogram(fill = "darkslateblue") + 
+  labs(title = "Distribution of nonViolPerPop", x = "nonViolPerPop", y = "Count") + theme_gray()
+```
+
+```{r cat-convert, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+#Make categorical versions of the response variables
+
+crime$ViolentCrimesPerPopCat <- cut(crime$ViolentCrimesPerPop, 
+                   breaks=c(0, 150, 300, 800, 1500, Inf), 
+                   labels=c("very low","low","moderate", "high", "very high"))
+crime$nonViolPerPopCat <- cut(crime$nonViolPerPop, 
+                   breaks=c(0, 2000, 4000, 6000, 8000, Inf), 
+                   labels=c("very low","low","moderate", "high", "very high"))
+```
+Since the goal of our analysis is prediction, we only want to include in our model the variables that are strong predictors of the response, as including irrelevant predictors might increase the width of the prediction intervals, and this would be counterproductive to our goal. We use backwards selection to choose our model, and use BIC as our model selection criterion, as it favors more parsimonious models and therefore aligns with our aim of including only strong predictors.
+
+```{r log_reg_models, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+viol_model <- multinom(ViolentCrimesPerPopCat ~ racepctblack + racePctHisp+ medIncome + pctWPubAsst + PctLess9thGrade + PctForeignBorn, data = crime)
+
+nonviol_model <- multinom(nonViolPerPopCat ~ racepctblack + racePctHisp + 
+  medIncome + pctWSocSec + PctPopUnderPov + PctLess9thGrade + PctEmploy, data = crime)
+
+kable(tidy(viol_model, exponentiate = FALSE), format = "markdown", 
+      digits = 3)
+
+kable(tidy(nonviol_model, exponentiate = FALSE), format = "markdown", 
+      digits = 3)
+```
+
+After backwards selection, we find that the model for violent crimes includes racepctblack, racePctHisp, medIncome, pctWPubAsst, PctLess9thGrade, and PctForeignBorn as predictors and the model for non-violent crimes includes racepctblack, racePctHisp, medIncome, pctWSocSec, PctPopUnderPov, PctLess9thGrade, and PctEmploy as predictors (see Output A below in Additional Work).
+
+```{r predictions, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+crime_noNA <- crime %>%
+  filter(!is.na(crime$ViolentCrimesPerPopCat))
+predict_model_viol <- predict(viol_model, type = "class")
+table(crime_noNA$ViolentCrimesPerPopCat, predict_model_viol)
+
+crime_noNA2 <- crime %>%
+  filter(!is.na(crime$nonViolPerPopCat))
+predict_model_nonViol <- predict(nonviol_model, type = "class")
+table(crime_noNA2$nonViolPerPopCat, predict_model_nonViol)
+
+mean(predict_model_viol != crime$ViolentCrimesPerPopCat)
+mean(predict_model_nonViol != crime$nonViolPerPopCat)
+```
+Using the two models, we can make predictions about the crime rate in a certain area, for both violent and non-violent crime. From the table of predicted vs actual crime rates, we can identify the misclassification rate of the model.
+```{r predprobs, warning = FALSE, message = FALSE, echo = FALSE}
+predprobs <- data.frame(predict(viol_model, type = "probs"))
+
+crime_pred <- crime %>%
+  mutate(verylow = ifelse(ViolentCrimesPerPopCat == "verylow", 1, 0),
+         low = ifelse(ViolentCrimesPerPopCat == "low", 1, 0),
+         moderate = ifelse(ViolentCrimesPerPopCat == "moderate", 1, 0),
+         high = ifelse(ViolentCrimesPerPopCat == "high", 1, 0),
+         veryhigh = ifelse(ViolentCrimesPerPopCat == "veryhigh", 1, 0),
+         resid_verylow = verylow - predprobs$very.low,
+         resid_low = low - predprobs$low,
+         resid_moderate = moderate - predprobs$moderate,
+         resid_high = high - predprobs$high,
+         resid_veryhigh = veryhigh - predprobs$very.high,)
+```
+
+The misclassification rate for the prediction model for violent crime is 50% and the misclassification rate for the non-violent crime model is 52.99%. 
+
+```{r binnedresids, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+arm::binnedplot(x = predprobs$very.low, y = crime_pred$resid_low, xlab = "Predicted Probabilities", main = "Binned Residual vs. Predicted Probabilities: Very Low Crime Rate")
+arm::binnedplot(x = predprobs$low, y = crime_pred$resid_low, xlab = "Predicted Probabilities", main = "Binned Residual vs. Predicted Probabilities: Low Crime Rate")
+arm::binnedplot(x = predprobs$moderate, y = crime_pred$resid_moderate, xlab = "Predicted Probabilities", main = "Binned Residual vs. Predicted Probabilities: Moderate Crime Rate")
+arm::binnedplot(x = predprobs$high, y = crime_pred$resid_high, xlab = "Predicted Probabilities", main = "Binned Residual vs. Predicted Probabilities: High Crime Rate")
+arm::binnedplot(x = predprobs$very.high, y = crime_pred$resid_veryhigh, xlab = "Predicted Probabilities", main = "Binned Residual vs. Predicted Probabilities: Very High Crime Rate")
+```
+
+```{r binnedresids-vs-predictors, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+arm::binnedplot(x = crime_pred$racePctWhite, y = crime_pred$resid_verylow, xlab = "Age", main = "Binned Residual vs. Age: Very Low Crime Rate")
+arm::binnedplot(x = crime_pred$racePctWhite, y = crime_pred$resid_low, xlab = "Age", main = "Binned Residual vs. Age: Low Crime Rate")
+arm::binnedplot(x = crime_pred$racePctWhite, y = crime_pred$resid_moderate, xlab = "Age", main = "Binned Residual vs. Age: Moderate Crime Rate")
+arm::binnedplot(x = crime_pred$racePctWhite, y = crime_pred$resid_high, xlab = "Age", main = "Binned Residual vs. Age: High Crime Rate")
+arm::binnedplot(x = crime_pred$racePctWhite, y = crime_pred$resid_veryhigh, xlab = "Age", main = "Binned Residual vs. Age: Very High Crime Rate")
+
+arm::binnedplot(x = crime_pred$medIncome, y = crime_pred$resid_verylow, xlab = "Age", main = "Binned Residual vs. Age: Very Low Crime Rate")
+arm::binnedplot(x = crime_pred$medIncome, y = crime_pred$resid_low, xlab = "Age", main = "Binned Residual vs. Age: Low Crime Rate")
+arm::binnedplot(x = crime_pred$medIncome, y = crime_pred$resid_moderate, xlab = "Age", main = "Binned Residual vs. Age: Moderate Crime Rate")
+arm::binnedplot(x = crime_pred$medIncome, y = crime_pred$resid_high, xlab = "Age", main = "Binned Residual vs. Age: High Crime Rate")
+arm::binnedplot(x = crime_pred$medIncome, y = crime_pred$resid_veryhigh, xlab = "Age", main = "Binned Residual vs. Age: Very High Crime Rate")
+
+arm::binnedplot(x = crime_pred$PctLess9thGrade, y = crime_pred$resid_verylow, xlab = "Age", main = "Binned Residual vs. Age: Very Low Crime Rate")
+arm::binnedplot(x = crime_pred$PctLess9thGrade, y = crime_pred$resid_low, xlab = "Age", main = "Binned Residual vs. Age: Low Crime Rate")
+arm::binnedplot(x = crime_pred$PctLess9thGrade, y = crime_pred$resid_moderate, xlab = "Age", main = "Binned Residual vs. Age: Moderate Crime Rate")
+arm::binnedplot(x = crime_pred$PctLess9thGrade, y = crime_pred$resid_high, xlab = "Age", main = "Binned Residual vs. Age: High Crime Rate")
+arm::binnedplot(x = crime_pred$PctLess9thGrade, y = crime_pred$resid_veryhigh, xlab = "Age", main = "Binned Residual vs. Age: Very High Crime Rate")
+
+arm::binnedplot(x = crime_pred$PctForeignBorn, y = crime_pred$resid_verylow, xlab = "Age", main = "Binned Residual vs. Age: Very Low Crime Rate")
+arm::binnedplot(x = crime_pred$PctForeignBorn, y = crime_pred$resid_low, xlab = "Age", main = "Binned Residual vs. Age: Low Crime Rate")
+arm::binnedplot(x = crime_pred$PctForeignBorn, y = crime_pred$resid_moderate, xlab = "Age", main = "Binned Residual vs. Age: Moderate Crime Rate")
+arm::binnedplot(x = crime_pred$PctForeignBorn, y = crime_pred$resid_high, xlab = "Age", main = "Binned Residual vs. Age: High Crime Rate")
+arm::binnedplot(x = crime_pred$PctForeignBorn, y = crime_pred$resid_veryhigh, xlab = "Age", main = "Binned Residual vs. Age: Very High Crime Rate")
+```
+An examination of the binned residuals plots versus the predicted probabilities and the binned residual plots versus the predictors indicates that the model is generally a good fit for the data when not dealing with extremes. For the binned residual plots for the very low and very high crime rate categories, the binned residual plot exhibit a clear linear trend. This is expected since outliers are included in these categories. 
+```{r kfold-validation, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+crime_noNA3 <- crime %>%
+  filter(!is.na(crime$nonViolPerPopCat),!is.na(crime$ViolentCrimesPerPopCat))
+
+set.seed(04012019)
+crime_cv <- crossv_kfold(crime_noNA3, 5)
+
+models <- map(crime_cv$train, ~ multinom(ViolentCrimesPerPopCat ~ racePctWhite + medIncome + PctLess9thGrade + PctForeignBorn, data = crime_noNA3))
+
+test_crime <- map2_dbl(models, crime_cv$test, mse)
+```
+
+## Discussion & Limitations
+
+Although we have an expansive and reliable datasource in the Communities and Crime Unnormalized dataset, which includes information from the census, FBI, and Law Enforcement Management, there was still a lot of missing data that we needed to handle. In handling this missing data, we decided to exclude entries with NA, NaN, and Infinite values for violent and nonviolent crime rate. Since the number of entries with these values was small relative to the total number of observations and the observations with missing response data did not exhibit any obvious pattern, we do not believe this negatively affected our analysis. One way to approach missing data differently would have been to instead impute these values to avoid losing observations. 
+
+Issues we ran into in our multiple linear regression model involved multicollinearity and violations of the constant variance assumption in our multiple linear regression models. After correcting these issues, however, our models performed worse than they originally did. This was another factor influencing our choice to use the multinomial logistic regression model instead.
+
+As for our multinomial logistic regression model, we could have further investigated outliers and influential points. We analyzed this only for our MLR model, but we should have also done this for multinomial logistic regression to delineate a thorough and total analysis. We did also could have further investigated interaction effects, as we believe some variables may have significant interactions.
+
+Lastly, we wanted to address the presence of race-related predictors in our final models. The presence of these predictors in our models highlights the importance of having a nuanced understanding of modeling and statistical results, and of incorporating nuance into their interpretation. These race-related factors are correlated with various other factors, some included in, and others not included in, our analysis, and they should not be interpreted to mean that any particular group is more inclined towards crime. We believe that the variables that involve race that were discovered to be significant predictors of crime should not be used practically to consider crime rates. This relates to many issues of algorithmic fairness and bias in the use of data in society, but these are not the main focus of our project.
+
+## Conclusion
+
+Our multinomial logistic regression models and MLR models performed well by our standards. The predictive model for violent crime had a 50% misclassification rate, while the model for non-violent crime had a 52.99% misclassification rate. Considering we broke down crime rates into 5 levels, random guessing would have resulted in ~80% misclassification rate. The MLR models had R^2 values of around .5, suggesting a good portion of variance was explained by our models.
+
+We found that the most significant aspects for prediction in all of our models included median household income, percentage of people 25 and over with less than a 9th grade education, and percentage of households with public assistance income. We thought it was interesting that these variables were the most significant predictors of crime. These variables also aligned with our hypothesis. Further, we found that population density in persons per square mile and percentage of people 16 and over who are employed were significant predictors of nonviolent crime, but not violent crime. 
+
+## Additional Work
+
+#### Multiple Linear Regression
+
+As stated earlier, since the goal of our analysis is prediction, we only want to include in our model the variables that are strong predictors of the response variables because the inclusion of any irrelevant predictors will only increase the width of our prediction intervals and make our predictions less accurate. Just as in the Logistic Regression portion, we use backwards selection to choose our model, and use BIC as our model selection criterion, as it favors more parsimonious models and therefore aligns with our aim of including only strong predictors. Additionally in our Multiple Linear Regression we have mean centered all of our Predictor Variables because it makes the interpretation of the intercept and model coefficients much easier and the it makes the intercept much more meaningful.
+
+After adding missingpolice to our backwards selection, and removing the 6 police data variables due to collinearity issues, we found that missingpolice was in both the violent crimes and the non-violent crimes final models. In our regression below we show both the model taking into account this missingpolice variable, and not including it, for both Violent and non-Violent Crimes.
+
+```{r mean-cent, warning = FALSE, message = FALSE, echo = FALSE}
+#Mean center the predictor variables so that their coefficients are a better reperesentation of the dat
+
+crime <- crime %>%
+  mutate(populationCent = population - mean(population), 
+         racepctblackCent = racepctblack - mean(racepctblack),
+         racePctWhiteCent = racePctWhite - mean(racePctWhite),
+         racePctAsianCent = racePctAsian - mean(racePctAsian),
+         racePctHispCent = racePctHisp - mean(racePctHisp),
+         agePct16t24Cent = agePct16t24 - mean(agePct16t24),
+         pctUrbanCent = pctUrban - mean(pctUrban),
+         medIncomeCent = medIncome - mean(medIncome),
+         pctWSocSecCent = pctWSocSec - mean(pctWSocSec),
+         pctWPubAsstCent = pctWPubAsst - mean(pctWPubAsst),
+         PctPopUnderPovCent = PctPopUnderPov - mean(PctPopUnderPov),
+         PctLess9thGradeCent = PctLess9thGrade - mean(PctLess9thGrade),
+         PctNotHSGradCent = PctNotHSGrad - mean(PctNotHSGrad),
+         PctBSorMoreCent = PctBSorMore - mean(PctBSorMore),
+         PctUnemployedCent = PctUnemployed - mean(PctUnemployed),
+         PctEmployCent = PctEmploy - mean(PctEmploy),
+         PctRecImmig5Cent = PctRecImmig5 - mean(PctRecImmig5),
+         PctForeignBornCent = PctForeignBorn - mean(PctForeignBorn),
+         PopDensCent = PopDens - mean(PopDens))
+
+```
+
+```{r mlr-sel, warning = FALSE, message = FALSE, echo = FALSE, include = FALSE}
+#Violent Crime backwards selection without missingness variable
+
+model_Violent <- lm(ViolentCrimesPerPop ~ populationCent + racepctblackCent + racePctWhiteCent + racePctAsianCent + racePctHispCent + agePct16t24Cent + pctUrbanCent + medIncomeCent + pctWSocSecCent + pctWPubAsstCent + PctPopUnderPovCent + PctLess9thGradeCent + PctNotHSGradCent + PctBSorMoreCent + PctUnemployedCent + PctEmployCent + PctRecImmig5Cent + PctForeignBornCent + LemasTotReqPerPop + PolicPerPop + RacialMatchCommPol + PctPolicWhite + PctPolicMinor + PopDensCent + PolicBudgPerPop, data=crime)
+
+kable(tidy(model_Violent),format="html",digits=3)
+
+Violent_backward <- regsubsets(ViolentCrimesPerPop ~ populationCent + racepctblackCent + racePctWhiteCent + racePctAsianCent + racePctHispCent + agePct16t24Cent + pctUrbanCent + medIncomeCent + pctWSocSecCent + pctWPubAsstCent + PctPopUnderPovCent + PctLess9thGradeCent + PctNotHSGradCent + PctBSorMoreCent + PctUnemployedCent + PctEmployCent + PctRecImmig5Cent + PctForeignBornCent + LemasTotReqPerPop + PolicPerPop + RacialMatchCommPol + PctPolicWhite + PctPolicMinor + PopDensCent + PolicBudgPerPop, data = crime, method="backward")
+
+sel_summary <- summary(Violent_backward)
+coef(Violent_backward, which.min(sel_summary$bic))
+```
+
+```{r mlr-model-vio, warning = FALSE, message = FALSE, echo = FALSE, include = FALSE}
+#Violent Crime final model without missingness variable
+
+fin_model_Vio <- lm(ViolentCrimesPerPop ~ racepctblackCent + racePctHispCent + medIncomeCent + pctWPubAsstCent + PctLess9thGradeCent + PctForeignBornCent, data=crime)
+
+kable(tidy(fin_model_Vio),format="html",digits=6)
+```
+
+```{r mlr-sel2, warning = FALSE, message = FALSE, echo = FALSE, include = FALSE}
+#Violent Crime backwards selection with missingpolice variable
+
+Violent_backward2 <- regsubsets(ViolentCrimesPerPop ~ populationCent + racepctblackCent + racePctWhiteCent + racePctAsianCent + racePctHispCent + agePct16t24Cent + pctUrbanCent + medIncomeCent + pctWSocSecCent + pctWPubAsstCent + PctPopUnderPovCent + PctLess9thGradeCent + PctNotHSGradCent + PctBSorMoreCent + PctUnemployedCent + PctEmployCent + PctRecImmig5Cent + PctForeignBornCent + PopDensCent + missingpolice , data = crime, method="backward")
+
+sel_summary2 <- summary(Violent_backward2)
+coef(Violent_backward2, which.min(sel_summary2$bic))
+```
+
+Violent Crime final Multiple Linear Regression model with missingpolice variable
+
+```{r mlr-sel3, warning = FALSE, message = FALSE, echo = FALSE}
+#Violent Crime final model with missingpolice variable
+
+fin_model_Vio_miss <- lm(ViolentCrimesPerPop ~ racepctblackCent + racePctWhiteCent + racePctAsianCent + pctWPubAsstCent + PctLess9thGradeCent + PctNotHSGradCent + PctForeignBornCent + missingpolice, data=crime)
+
+kable(tidy(fin_model_Vio_miss),format="html",digits=6)
+```
+
+```{r mlr-sel4, warning = FALSE, message = FALSE, echo = FALSE, include = FALSE}
+#non-Violent Crime backwards selection without missingness variable
+
+model_nonVio <- lm(nonViolPerPop ~ populationCent + racepctblackCent + racePctWhiteCent + racePctAsianCent + racePctHispCent + agePct16t24Cent + pctUrbanCent + medIncomeCent + pctWSocSecCent + pctWPubAsstCent + PctPopUnderPovCent + PctLess9thGradeCent + PctNotHSGradCent + PctBSorMoreCent + PctUnemployedCent + PctEmployCent + PctRecImmig5Cent + PctForeignBornCent + LemasTotReqPerPop + PolicPerPop + RacialMatchCommPol + PctPolicWhite + PctPolicMinor + PopDensCent + PolicBudgPerPop, data=crime)
+
+kable(tidy(model_nonVio),format="html",digits=3)
+
+nonViolent_backward <- regsubsets(nonViolPerPop ~ populationCent + racepctblackCent + racePctWhiteCent + racePctAsianCent + racePctHispCent + agePct16t24Cent + pctUrbanCent + medIncomeCent + pctWSocSecCent + pctWPubAsstCent + PctPopUnderPovCent + PctLess9thGradeCent + PctNotHSGradCent + PctBSorMoreCent + PctUnemployedCent + PctEmployCent + PctRecImmig5Cent + PctForeignBornCent + LemasTotReqPerPop + PolicPerPop + RacialMatchCommPol + PctPolicWhite + PctPolicMinor + PopDensCent + PolicBudgPerPop, data = crime, method="backward")
+
+sel_summary_nonVio <- summary(nonViolent_backward)
+coef(nonViolent_backward, which.min(sel_summary_nonVio$bic))
+```
+
+```{r mlr-model-nonvio, warning = FALSE, message = FALSE, echo = FALSE, include = FALSE}
+#non-Violent Crime final model without missingpolice variable
+
+fin_model_nonVio <- lm(nonViolPerPop ~ racepctblackCent + pctWSocSecCent + PctPopUnderPovCent + PctLess9thGradeCent + PctEmployCent + PctRecImmig5Cent + PctForeignBornCent + PopDensCent, data=crime)
+
+kable(tidy(fin_model_nonVio),format="html",digits=5)
+```
+
+Non-Violent Crime final Multiple Linear Regression model with missingpolice variable
+
+```{r mlr-sel5, warning = FALSE, message = FALSE, echo = FALSE, include = FALSE}
+#non-Violent Crime backwards selection with missingpolice variable
+
+nonViolent_backward2 <- regsubsets(nonViolPerPop ~ populationCent + racepctblackCent + racePctWhiteCent + racePctAsianCent + racePctHispCent + agePct16t24Cent + pctUrbanCent + medIncomeCent + pctWSocSecCent + pctWPubAsstCent + PctPopUnderPovCent + PctLess9thGradeCent + PctNotHSGradCent + PctBSorMoreCent + PctUnemployedCent + PctEmployCent + PctRecImmig5Cent + PctForeignBornCent + PopDensCent + missingpolice , data = crime, method="backward")
+
+sel_summary22 <- summary(nonViolent_backward2)
+coef(nonViolent_backward2, which.min(sel_summary22$bic))
+```
+
+```{r mlr-model-nonvio-misspo, warning = FALSE, message = FALSE, echo = FALSE}
+#non-Violent Crime final model with missingpolice variable
+
+fin_model_nonVio_miss <- lm(nonViolPerPop ~ racepctblackCent + agePct16t24Cent + medIncomeCent + PctPopUnderPovCent + PctLess9thGradeCent + PctForeignBornCent + PopDensCent + missingpolice, data=crime)
+
+kable(tidy(fin_model_nonVio_miss),format="html",digits=6)
+```
+
+#### MLR Model Assumptions and Model Diagnostics
+
+As we are using a multiple linear regression model, we need to test regression assumptions and make sure that they are satisfied. First, we will pick the two best models out of the four that we have created. We will do so by taking the models with the highest R^2 and adjusted R^2 values.
+```{r pick-model, warning = FALSE, message = FALSE, echo = FALSE}
+glance(fin_model_Vio)
+glance(fin_model_Vio_miss)
+glance(fin_model_nonVio)
+glance(fin_model_nonVio_miss)
+```
+We see that the models with the missing police indicator explain slightly more variance than the models without the indicator. However, we will use the violent crimes model without the missing indicator variable, since it has less multicollinearity(not shown here, but this has been explored in our project). We will choose the nonviolent crimes model with the missing indicator variable.
+
+We will test linearity and constant variance between the response variables, ViolentCrimesPerPop and nonViolPerPop, against the predictor variables. We will plot the residuals against our predicted values in for both models. 
+```{r test-assumptions-residuals, warning = FALSE, message = FALSE, echo = FALSE, include = FALSE}
+crime <- crime %>% 
+  mutate(predicted_violent = predict.lm(fin_model_Vio), residuals_violent = resid(fin_model_Vio), predicted_nonViolent = predict.lm(fin_model_nonVio_miss), residuals_nonViolent = resid(fin_model_nonVio_miss))
+
+ggplot(data=crime,aes(x=predicted_violent, y=residuals_violent)) + 
+  geom_point() + 
+  geom_hline(yintercept=0,color="red") +
+  labs(title="Residuals vs. Predicted Values of Violent Crime")
+
+ggplot(data=crime,aes(x=predicted_nonViolent, y=residuals_nonViolent)) + 
+  geom_point() + 
+  geom_hline(yintercept=0,color="red") +
+  labs(title="Residuals vs. Predicted Values of Non-Violent Crime")
+```
+We can see that the plot of the residuals against the models for violent and nonviolent crime violate the constant variance assumption! To correct this, we may try fitting new models based on a log-transformed version of the response variables.
+
+First we will output the corrected Violent Crimes model with the log transformed response: log_ViolentCrimesPerPop
+```{r corrected-violent-model, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+crime <- crime %>% mutate(log_ViolentCrimesPerPop = log(ViolentCrimesPerPop), log_nonViolPerPop = log(nonViolPerPop))
+
+corrected_fin_model_Vio <- lm(data=crime, log_ViolentCrimesPerPop ~ racepctblackCent + racePctHispCent + medIncomeCent + pctWPubAsstCent + PctLess9thGradeCent + PctForeignBornCent)
+
+kable(tidy(corrected_fin_model_Vio),format="html",digits=6)
+```
+Next, we will output the corrected NonViolent Crimes model with the log transformed response: log_nonViolPerPop
+```{r corrected-nonviolent-model, warning = FALSE, message = FALSE, echo = FALSE, include=FALSE}
+corrected_fin_model_nonVio_miss <- lm(data=crime, log_nonViolPerPop ~ racepctblackCent + agePct16t24Cent + medIncomeCent + PctPopUnderPovCent + PctLess9thGradeCent + PctForeignBornCent + PopDensCent + missingpolice)
+
+kable(tidy(corrected_fin_model_nonVio_miss),format="html",digits=6)
+```
+We will again check the linearity and constant variance assumption for these new models:
+```{r constant-variance-cont, warning = FALSE, message = FALSE, echo = FALSE}
+crime <- crime %>% 
+  mutate(predicted_violent = predict.lm(corrected_fin_model_Vio), residuals_violent = resid(corrected_fin_model_Vio), predicted_nonViolent = predict.lm(corrected_fin_model_nonVio_miss), residuals_nonViolent = resid(corrected_fin_model_nonVio_miss))
+
+ggplot(data=crime,aes(x=predicted_violent, y=residuals_violent)) + 
+  geom_point() + 
+  geom_hline(yintercept=0,color="red") +
+  labs(title="Residuals vs. Predicted Values of Violent Crime Using Corrected Model")
+
+ggplot(data=crime,aes(x=predicted_nonViolent, y=residuals_nonViolent)) + 
+  geom_point() + 
+  geom_hline(yintercept=0,color="red") +
+  labs(title="Residuals vs. Predicted Values of Non-Violent Crime Using Corrected Model")
+```
+These residuals look a lot more like they reflect random error. We can now conclude that linearity and constant variance are satisfied.
+
+Next, we will check the normality assumption by examining a histogram and normal QQ plot of residuals to visualize their distribution.
+```{r test-normality-assumption, warning = FALSE, include = FALSE, message = FALSE, echo = FALSE}
+ggplot(data=crime,mapping=aes(x=residuals_violent)) + 
+  geom_histogram() + 
+  labs(title="Distribution of Residuals for Violent Crime Model") +
+  theme_gray()
+
+ggplot(data=crime,mapping=aes(sample=residuals_violent)) + 
+  stat_qq() + 
+  stat_qq_line() +
+  labs(title="Normal QQ Plot of Residuals for Violent Crime Model") +
+  theme_gray()
+
+ggplot(data=crime,mapping=aes(x=residuals_nonViolent)) + 
+  geom_histogram() + 
+  labs(title="Distribution of Residuals for NonViolent Crime Model") +
+  theme_gray()
+
+ggplot(data=crime,mapping=aes(sample=residuals_nonViolent)) + 
+  stat_qq() + 
+  stat_qq_line() +
+  labs(title="Normal QQ Plot of Residuals for NonViolent Crime Model") +
+  theme_gray()
+```
+The histogram of the residuals for both models are unimodal and centered around 0, slightly left skewed, and similar to the normal distribution curve. The plot of the residuals also falls nicely on the normal QQ plot, so we can determine that the normality assumption is satisfied.
+
+The data is independent because entries were collected independently. We will not check for a serial effect since the data was not collected over time.
+
+Following our assessment of model assumptions, we saw some outliers in the plots of residuals. We can check influential points for there outliers by using visualizing leverage, standardized residuals, and Cook's distance:
+```{r influential-points, warning = FALSE, message = FALSE, echo = FALSE, include = FALSE}
+violent_crime_output <- augment(corrected_fin_model_Vio) %>%
+  mutate(obs_num = row_number())
+nonviolent_crime_output <- augment(corrected_fin_model_nonVio_miss) %>%
+  mutate(obs_num = row_number())
+
+leverage_threshold_vio <- 2*(6+1)/nrow(crime)
+leverage_threshold_nonvio <- 2*(8+1)/nrow(crime)
+
+ggplot(data = violent_crime_output, aes(x = obs_num,y = .hat)) + 
+  geom_point(alpha = 0.7) + 
+  geom_hline(yintercept = leverage_threshold_vio,color = "red")+
+  labs(x = "Observation Number",y = "Leverage",title = "Leverage plot for Violent Crime Model") +
+  geom_text(aes(label=ifelse(.hat > leverage_threshold_vio, as.character(obs_num), "")), nudge_x = 4)
+
+ggplot(data = nonviolent_crime_output, aes(x = obs_num,y = .hat)) + 
+  geom_point(alpha = 0.7) + 
+  geom_hline(yintercept = leverage_threshold_nonvio,color = "red")+
+  labs(x = "Observation Number",y = "Leverage",title = "Leverage plot for Non-Violent Crime Model") +
+  geom_text(aes(label=ifelse(.hat > leverage_threshold_nonvio, as.character(obs_num), "")), nudge_x = 4)
+
+ggplot(data = violent_crime_output, aes(x = .fitted,y = .std.resid)) +
+  geom_point(alpha = 0.7) + 
+  geom_hline(yintercept = 0,color = "red") +
+  geom_hline(yintercept = -2,color = "red",linetype = "dotted") +
+  geom_hline(yintercept = 2,color = "red",linetype = "dotted") +
+  labs(x ="Predicted Value",y ="Standardized Residuals",title = "Standardized Residuals vs. Predicted for Violent Crimes Model") +
+  geom_text(aes(label = ifelse(abs(.std.resid) >2,as.character(obs_num),"")), nudge_x = 0.3)
+
+ggplot(data = nonviolent_crime_output, aes(x = .fitted,y = .std.resid)) +
+  geom_point(alpha = 0.7) + 
+  geom_hline(yintercept = 0,color = "red") +
+  geom_hline(yintercept = -2,color = "red",linetype = "dotted") +
+  geom_hline(yintercept = 2,color = "red",linetype = "dotted") +
+  labs(x ="Predicted Value",y ="Standardized Residuals",title = "Standardized Residuals vs. Predicted for Non-Violent Crimes Model") +
+  geom_text(aes(label = ifelse(abs(.std.resid) >2,as.character(obs_num),"")), nudge_x = 0.3)
+
+ggplot(data = violent_crime_output, aes(x = obs_num, y = .cooksd)) + 
+  geom_point(alpha = 0.7) + 
+  geom_hline(yintercept=1,color = "red")+
+  labs(x= "Observation Number",y = "Cook's Distance",title = "Cook's Distance for Violent Crimes Model") +
+  geom_text(aes(label = ifelse(.hat>1,as.character(obs_num),"")))
+
+ggplot(data = nonviolent_crime_output, aes(x = obs_num, y = .cooksd)) + 
+  geom_point(alpha = 0.7) + 
+  geom_hline(yintercept=1,color = "red")+
+  labs(x= "Observation Number",y = "Cook's Distance",title = "Cook's Distance for NonViolent Crimes Model") +
+  geom_text(aes(label = ifelse(.hat>1,as.character(obs_num),"")))
+```
+We can see from our analyses that a large amount of points have high leverage! This, however, may not be an issue if they don't have a substantial impact on our regression. We can see by our graph of standardized residuals that many entries exceed a magnitude of > 2. This may suggest that these points with high standardized residuals are outliers and don't fit the pattern determined by our regression model. Ultimately, however, none of the entries have a Cook's Distance measure remotely close to > 1, so they will not affect our regression coefficients. We should not drop any observations as it would not be meaningful.
+
+Lastly, we will check for multicollinearity. We will analyze the variance inflation factor of our models. We start with the violent crimes model:
+```{r vif-vio, warning = FALSE, message = FALSE, echo = FALSE}
+vif(corrected_fin_model_Vio)
+```
+There are no concerning problems with multicollinearity, since all VIFs are below 10. We will also check our nonviolent crimes model:
+```{r vif-nonvio, warning = FALSE, message = FALSE, echo = FALSE}
+vif(corrected_fin_model_nonVio_miss)
+```
+There are also no concerning problems with multicollinearity in this model.
+
+In essence, all of our model assumptions are met with the exception of a cone shaped scatter plot of predicted crimes vs. residuals. We fixed this with a new model using log-transformed response variables. We tested all 4 models (Violent/Nonviolent with and without missing police indicator variable) and found that the below two models performed the best. The excluded two models had issues with multicollinearity that significantly decreased their performances when the intercorrelated variables were dropped.
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+glance(corrected_fin_model_Vio)
+glance(corrected_fin_model_nonVio_miss)
+```
+Looking at R^2 and Adjusted R^2, we see that our violent crimes model explains a bit more variance than our non-violent crimes model.
+
+#### Referenced Output
+
+Output A):
+
+```{r selection, warning = FALSE, message = FALSE, echo = FALSE}
+#Backwards selection for violent crimes model
+viol_backward <- regsubsets(ViolentCrimesPerPopCat ~ population + racepctblack + racePctWhite + racePctAsian + racePctHisp + agePct16t24 + pctUrban + 
+  medIncome + pctWSocSec + pctWPubAsst + PctPopUnderPov + PctLess9thGrade + 
+  PctNotHSGrad + PctBSorMore + PctUnemployed + PctEmploy + PctRecImmig5 + 
+  PctForeignBorn + LemasTotReqPerPop + PolicPerPop + RacialMatchCommPol + 
+  PctPolicWhite + PctPolicMinor + PopDens + PolicBudgPerPop, data = crime, method="backward")
+
+#Backwards selection for non-violent crimes model
+nonviol_backward <- regsubsets(nonViolPerPopCat ~ population + racepctblack +
+  racePctWhite + racePctAsian + racePctHisp + agePct16t24 + pctUrban + 
+  medIncome + pctWSocSec + pctWPubAsst + PctPopUnderPov + PctLess9thGrade + 
+  PctNotHSGrad + PctBSorMore + PctUnemployed + PctEmploy + PctRecImmig5 + 
+  PctForeignBorn + LemasTotReqPerPop + PolicPerPop + RacialMatchCommPol + 
+  PctPolicWhite + PctPolicMinor + PopDens + PolicBudgPerPop, data = crime, method="backward")
+
+viol_summary <- summary(viol_backward)
+nonviol_summary <- summary(nonviol_backward)
+coef(viol_backward, which.min(viol_summary$bic)) # BIC
+coef(nonviol_backward, which.min(nonviol_summary$bic)) # BIC
+```
+
+## References
+
+U.S. Department of Commerce, Bureau of the Census, Census Of Population And Housing 1990 United States: Summary Tape File 1a & 3a (Computer Files), 
+
+U.S. Department Of Commerce, Bureau Of The Census Producer, Washington, DC and Inter-university Consortium for Political and Social Research Ann Arbor, Michigan. (1992) 
+
+U.S. Department of Justice, Bureau of Justice Statistics, Law Enforcement Management And Administrative Statistics (Computer File) U.S. Department Of Commerce, Bureau Of The Census Producer, Washington, DC and Inter-university Consortium for Political and Social Research Ann Arbor, Michigan. (1992) 
+
+U.S. Department of Justice, Federal Bureau of Investigation, Crime in the United States (Computer File) (1995) 
+
+[Redmond and Highley 2009] Redmond, M., and Highley, T., Empirical Analysis of Case-Editing Approaches for Numeric Prediction. In International Joint Conference on Computer, Information, and Systems Sciences and Engineering (CISSE) subconference International Conference on Systems, Computing Sciences and Software Engineering (SCSS). University of Bridgeport, CT, December 2009. 
+-- All numeric data was normalized (0-1), ViolentCrimesPerPop was predicted (all other crime attributes were eliminated) 
+-- Best mean absolute error obtained was .096 (on normalized data) 
+
+[Buczak and Gifford 2010] Buczak, A. L. and Gifford, C. M., Fuzzy Association Rule Mining for Community Crime Pattern Discovery. In Workshop on Intelligence and Security Informatics at 16th Conference on Knowledge Discovery and Data Mining (ISI-KDD-2010). Washington DC. July 2010. 
+
+Data found at: UC Irvine Machine Learning Repository
+-- Data was subsequently further processed 

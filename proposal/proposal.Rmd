@@ -1,0 +1,151 @@
+---
+title: "ANALYSIS OF FACTORS CONTRIBUTING TO CRIME"
+author: "The Blue Devils"
+date: "March 29, 2019"
+output: github_document
+---
+
+## Section 1. Introduction
+
+While brainstorming problems we might want to explore, we began to think about issues relevant to our community at Duke and how Durham, NC has changed over time. It is a frequent occurrence to hear someone who has lived for a long time in the area talk about how Durham, particularly downtown Durham, has changed significantly over the past 10 to 20 years in several ways, including in terms of a reduction of crime rates. Considering this phenomenon caused us to wonder about why this might be and what factors might contribute most to crime rates in general.
+
+This thought process was our motivation for considering the question of what factors related to attributes of a given location and population would best predict crime rates. For this purpose, we obtained a data set concerning communities and crime from the UCI Machine Learning Repository site, which includes 147 variables and 2215 observations.
+
+Given the factors included in this data set, we hypothesize that median income, the percentage of people in the area who live in an urban setting, and the population's level of education will be among the strongest predictors of crime. The rationale for this hypothesis is that low median income, an urban setting, and a less educated population seem to be factors that might predispose populations to higher rates of crime.
+
+## Section 2. Analysis plan
+
+There are two response variables that we are interested in. One is the variable ViolentCrimesPerPop, which is the total number of violent crimes per 100K popuation. The other is the variable nonViolPerPop, which is the total number of non-violent crimes per 100K popuation. The values that both of these variables take are numeric decimals. 
+
+For predictor variables, there were originally 147 variables in the entire dataset, but we scanned through and chose the ones that we thought were the most interesting. We chose these variables not because we thought that they were the ones that would have the highest correlation, but because they were the variables that we were most interested in. We know that in actual practice if we were trying to do analysis on this data we would not want to arbitrarily select variables, because we might be missing something important. However, for this class and for our analysis we believe that instead of running backwards selection for all 147 variables that it is reasonable to select 25 or so that we are particularly interested in.  These variables include:
+
+- population: population for community: (numeric integer) 
+- racepctblack: percentage of population that is african american (numeric decimal) 
+- racePctWhite: percentage of population that is caucasian (numeric decimal) 
+- racePctAsian: percentage of population that is of asian heritage (numeric decimal) 
+- racePctHisp: percentage of population that is of hispanic heritage (numeric decimal) 
+- agePct16t24: percentage of population that is 16-24 in age (numeric decimal) 
+- pctUrban: percentage of people living in areas classified as urban (numeric decimal) 
+- medIncome: median household income (numeric - may be integer) 
+- pctWSocSec: percentage of households with social security income in 1989 (numeric decimal) 
+- pctWPubAsst: percentage of households with public assistance income in 1989 (numeric decimal) 
+- PctPopUnderPov: percentage of people under the poverty level (numeric decimal) 
+- PctLess9thGrade: percentage of people 25 and over with less than a 9th grade education (numeric decimal) 
+- PctNotHSGrad: percentage of people 25 and over that are not high school graduates (numeric decimal) 
+- PctBSorMore: percentage of people 25 and over with a bachelors degree or higher education (numeric decimal) 
+- PctUnemployed: percentage of people 16 and over, in the labor force, and unemployed (numeric decimal) 
+- PctEmploy: percentage of people 16 and over who are employed (numeric decimal) 
+- PctRecImmig5: percent of population who have immigrated within the last 5 years (numeric decimal) 
+- PctForeignBorn: percent of people foreign born (numeric decimal) 
+- LemasTotReqPerPop: total requests for police per 100K popuation (numeric decimal) 
+- PolicPerPop: police officers per 100K population (numeric decimal) 
+- RacialMatchCommPol: a measure of the racial match between the community and the police force. High values indicate proportions in community and police force are similar (numeric decimal) 
+- PctPolicWhite: percent of police that are caucasian (numeric decimal) 
+- PctPolicMinor: percent of police that are minority of any kind (numeric decimal) 
+- PopDens: population density in persons per square mile (numeric decimal) 
+- PolicBudgPerPop: police operating budget per population (numeric decimal) 
+
+We will use backward selection to find the most appropriate variables to use in our final model. For the remaining predictor variables after selection, we will analyze the population coefficients to understand how each predictor influences violent and non-violent crime rates. Ultimately, we will use our model to predict crime rates in different areas.
+
+```{r load-packages}
+library(tidyverse)
+library(broom)
+library(knitr) 
+library(rms)
+```
+
+``` {r load-data}
+crime <- read_csv("CommViolPredUnnormalizedDataHeaders.csv")
+```
+
+```{r eda}
+ggplot(data=crime, mapping=aes(x=population, y=ViolentCrimesPerPop)) +
+  geom_point(color="blue", shape=1) +
+  geom_hline(yintercept=0, color="black") +
+  labs(title="Graph of population vs. ViolentCrimesPerPop",
+    x="population",
+    y="ViolentCrimesPerPop")
+
+ggplot(data=crime, mapping=aes(x=racepctblack, y=ViolentCrimesPerPop)) +
+  geom_point(color="blue", shape=1) +
+  geom_hline(yintercept=0, color="black") +
+  labs(title="Graph of racepctblack vs. ViolentCrimesPerPop",
+    x="racepctblack",
+    y="ViolentCrimesPerPop")
+
+ggplot(data=crime, mapping=aes(x=racePctWhite, y=ViolentCrimesPerPop)) +
+  geom_point(color="blue", shape=1) +
+  geom_hline(yintercept=0, color="black") +
+  labs(title="Graph of racePctWhite vs. ViolentCrimesPerPop",
+    x="racePctWhite",
+    y="ViolentCrimesPerPop")
+
+ggplot(data=crime, mapping=aes(x=racePctAsian, y=ViolentCrimesPerPop)) +
+  geom_point(color="blue", shape=1) +
+  geom_hline(yintercept=0, color="black") +
+  labs(title="Graph of racePctAsian vs. ViolentCrimesPerPop",
+    x="racePctAsian",
+    y="ViolentCrimesPerPop")
+
+ggplot(data=crime, mapping=aes(x=racePctHisp, y=ViolentCrimesPerPop)) +
+  geom_point(color="blue", shape=1) +
+  geom_hline(yintercept=0, color="black") +
+  labs(title="Graph of racePctHisp vs. ViolentCrimesPerPop",
+    x="racePctHisp",
+    y="ViolentCrimesPerPop")
+
+ggplot(data=crime, mapping=aes(x=agePct16t24, y=ViolentCrimesPerPop)) +
+  geom_point(color="blue", shape=1) +
+  geom_hline(yintercept=0, color="black") +
+  labs(title="Graph of agePct16t24 vs. ViolentCrimesPerPop",
+    x="agePct16t24",
+    y="ViolentCrimesPerPop")
+
+ggplot(data=crime, mapping=aes(x=pctUrban, y=ViolentCrimesPerPop)) +
+  geom_point(color="blue", shape=1) +
+  geom_hline(yintercept=0, color="black") +
+  labs(title="Graph of pctUrban vs. ViolentCrimesPerPop",
+    x="pctUrban",
+    y="ViolentCrimesPerPop")
+
+ggplot(data=crime, mapping=aes(x=medIncome, y=ViolentCrimesPerPop)) +
+  geom_point(color="blue", shape=1) +
+  geom_hline(yintercept=0, color="black") +
+  labs(title="Graph of medIncome vs. ViolentCrimesPerPop",
+    x="medIncome",
+    y="ViolentCrimesPerPop")
+
+```
+
+During our preliminary EDA, we find that the variables we are analyzing do not seem to have a strong linear correlation with our response variable. This suggests that we may logit transform our response variable later, as it represents a rate. 
+
+There are many different things that we can do further to assess linearity including looking at interactions or log transforms with our response variable that might show a stronger correlation between our response and predictor variables that might better satisfy the linearity requirements. In addition, we will want to assess the normality of our predictor and response variables and check for outliers using measures such as Cook's Distance.
+
+Some regression methods we plan on using throughout our project are transformations, MLR, prediction, selection, and logistic regression.
+
+## Section 3. Data
+
+```{r glimpse}
+glimpse(crime)
+```
+
+
+## Section 4. References
+
+U.S. Department of Commerce, Bureau of the Census, Census Of Population And Housing 1990 United States: Summary Tape File 1a & 3a (Computer Files), 
+
+U.S. Department Of Commerce, Bureau Of The Census Producer, Washington, DC and Inter-university Consortium for Political and Social Research Ann Arbor, Michigan. (1992) 
+
+U.S. Department of Justice, Bureau of Justice Statistics, Law Enforcement Management And Administrative Statistics (Computer File) U.S. Department Of Commerce, Bureau Of The Census Producer, Washington, DC and Inter-university Consortium for Political and Social Research Ann Arbor, Michigan. (1992) 
+
+U.S. Department of Justice, Federal Bureau of Investigation, Crime in the United States (Computer File) (1995) 
+
+1. [Redmond and Highley 2009] Redmond, M., and Highley, T., Empirical Analysis of Case-Editing Approaches for Numeric Prediction. In International Joint Conference on Computer, Information, and Systems Sciences and Engineering (CISSE) subconference International Conference on Systems, Computing Sciences and Software Engineering (SCSS). University of Bridgeport, CT, December 2009. 
+-- All numeric data was normalized (0-1), ViolentCrimesPerPop was predicted (all other crime attributes were eliminated) 
+-- Best mean absolute error obtained was .096 (on normalized data) 
+
+2. [Buczak and Gifford 2010] Buczak, A. L. and Gifford, C. M., Fuzzy Association Rule Mining for Community Crime Pattern Discovery. In Workshop on Intelligence and Security Informatics at 16th Conference on Knowledge Discovery and Data Mining (ISI-KDD-2010). Washington DC. July 2010. 
+
+Data found at: UC Irvine Machine Learning Repository
+
+-- Data was further processed 
